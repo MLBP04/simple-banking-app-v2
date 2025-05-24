@@ -40,17 +40,31 @@ def init_mysql_database():
         
         try:
             with connection.cursor() as cursor:
-                # Drop database if exists
-                print("Dropping database if it exists...")
-                cursor.execute(f"DROP DATABASE IF EXISTS {mysql_database}")
+                # Instead of dropping the entire database, check if it exists first
+                cursor.execute(f"SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '{mysql_database}'")
+                database_exists = cursor.fetchone()
                 
-                # Create database
-                print("Creating database...")
-                cursor.execute(f"CREATE DATABASE {mysql_database} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
-                
-                # Use the database
-                print("Switching to database...")
-                cursor.execute(f"USE {mysql_database}")
+                if database_exists:
+                    print(f"Database '{mysql_database}' exists. Using existing database...")
+                    cursor.execute(f"USE {mysql_database}")
+                    
+                    # Drop individual tables instead of the whole database
+                    print("Dropping existing tables individually...")
+                    cursor.execute("SET FOREIGN_KEY_CHECKS = 0")
+                    cursor.execute("SHOW TABLES")
+                    tables = cursor.fetchall()
+                    
+                    for table in tables:
+                        table_name = list(table.values())[0]
+                        print(f"Dropping table: {table_name}")
+                        cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
+                    
+                    cursor.execute("SET FOREIGN_KEY_CHECKS = 1")
+                else:
+                    # Create new database if it doesn't exist
+                    print(f"Creating new database '{mysql_database}'...")
+                    cursor.execute(f"CREATE DATABASE {mysql_database} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
+                    cursor.execute(f"USE {mysql_database}")
                 
                 # Create users table
                 print("Creating users table...")
@@ -79,6 +93,14 @@ def init_mysql_database():
                   is_admin BOOLEAN DEFAULT FALSE,
                   is_manager BOOLEAN DEFAULT FALSE,
                   date_registered DATETIME DEFAULT CURRENT_TIMESTAMP,
+                  first_name VARCHAR(100),
+                  last_name VARCHAR(100),
+                  phone_number VARCHAR(20),
+                  address VARCHAR(200),
+                  date_of_birth DATE,
+                  profile_complete BOOLEAN DEFAULT FALSE,
+                  pin_hash VARCHAR(128),
+                  pin_set BOOLEAN DEFAULT FALSE,
                   INDEX idx_username (username),
                   INDEX idx_email (email),
                   INDEX idx_account_number (account_number)
@@ -364,22 +386,6 @@ def init_flask_app_db():
             
             except Exception as data_error:
                 print(f"Error creating sample data: {data_error}")
-                print(traceback.format_exc())
-                return False
-            
-            # Create a migration script
-            try:
-                print("== Creating migration script for database changes ==")
-                # Add columns to User table
-                db.engine.execute('ALTER TABLE user ADD first_name VARCHAR(100)')
-                db.engine.execute('ALTER TABLE user ADD last_name VARCHAR(100)')
-                db.engine.execute('ALTER TABLE user ADD phone_number VARCHAR(20)')
-                db.engine.execute('ALTER TABLE user ADD address VARCHAR(200)')
-                db.engine.execute('ALTER TABLE user ADD date_of_birth DATE')
-                db.engine.execute('ALTER TABLE user ADD profile_complete BOOLEAN DEFAULT FALSE')
-                print("Migration script executed successfully!")
-            except Exception as migration_error:
-                print(f"Error creating migration script: {migration_error}")
                 print(traceback.format_exc())
                 return False
             
